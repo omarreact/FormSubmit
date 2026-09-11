@@ -1,6 +1,6 @@
 /**
- * PDF Dossier Generator - core merging logic using pdf-lib
- * Produces a single self-contained PDF with summary + all uploaded pages.
+ * PDF Dossier Generator — core merging logic using pdf-lib
+ * Document pages are rasterized to compressed JPEG for a lighter final file.
  */
 
 import { auditDocuments, sortDocumentsForPdf, groupByCategory } from "./document-audit.js";
@@ -13,6 +13,31 @@ import { APP_CONFIG } from "./config.js";
 
 const A4_WIDTH = 595.28;
 const A4_HEIGHT = 841.89;
+
+/** JPEG quality 0–1 (lower = smaller file) */
+const JPEG_QUALITY = 0.72;
+/** Max pixel edge when rasterizing (≈150–170 dpi on A4) */
+const MAX_PIXEL_EDGE = 1600;
+const PAGE_MARGIN = 36;
+
+const PDFJS_URL = "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.4.168/build/pdf.mjs";
+const PDFJS_WORKER =
+  "https://cdn.jsdelivr.net/npm/pdfjs-dist@4.4.168/build/pdf.worker.min.mjs";
+
+let pdfjsLibPromise = null;
+
+function loadPdfJs() {
+  if (!pdfjsLibPromise) {
+    pdfjsLibPromise = import(PDFJS_URL).then((mod) => {
+      const lib = mod.default || mod;
+      if (lib.GlobalWorkerOptions) {
+        lib.GlobalWorkerOptions.workerSrc = PDFJS_WORKER;
+      }
+      return lib;
+    });
+  }
+  return pdfjsLibPromise;
+}
 
 export async function generateApplicantPdf(submission, documents, onProgress, options = {}) {
   const progress = (p) => {
@@ -28,13 +53,12 @@ export async function generateApplicantPdf(submission, documents, onProgress, op
     const audit = auditDocuments(submission, documents);
 
     progress({ status: STATUS.AUDITING, percent: 10, message: "Auditing required documents…" });
-
     progress({ status: STATUS.FETCHING, percent: 15, message: "Loading document metadata…" });
 
     const sorted = sortDocumentsForPdf(documents);
     const groups = groupByCategory(sorted);
 
-    const { PDFDocument, rgb } = await import(
+    const { PDFDocument } = await import(
       "https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/+esm"
     );
 
@@ -64,12 +88,7 @@ export async function generateApplicantPdf(submission, documents, onProgress, op
       const label = rule ? rule.label : group.key;
 
       if (group.docs.length > 0 && options.addSeparators !== false) {
-        await addSeparatorPage(
-          mergedPdf,
-          order,
-          label,
-          submission.applicantName
-        );
+        await addSeparatorPage(mergedPdf, order, label, submission.applicantName);
       }
 
       for (const docMeta of group.docs) {
@@ -121,12 +140,16 @@ export async function generateApplicantPdf(submission, documents, onProgress, op
         progress({
           status: STATUS.PROCESSING,
           percent: pct + 2,
-          message: `Processing: ${docMeta.fileName || "document"}…`,
+          message: `Compressing: ${docMeta.fileName || "document"}…`,
         });
 
         try {
           if (mime.includes("pdf") || name.endsWith(".pdf")) {
-            const pagesAdded = await appendPdfPages(mergedPdf, arrayBuffer, PDFDocument);
+            const pagesAdded = await appendPdfAsCompressedJpegs(
+              mergedPdf,
+              arrayBuffer,
+              PDFDocument
+            );
             totalPagesAdded += pagesAdded;
           } else if (
             mime.includes("jpeg") ||
@@ -136,14 +159,24 @@ export async function generateApplicantPdf(submission, documents, onProgress, op
             name.endsWith(".jpeg") ||
             name.endsWith(".png")
           ) {
-            await appendImagePage(mergedPdf, arrayBuffer, mime, name, PDFDocument);
+            await appendImageAsCompressedJpeg(mergedPdf, arrayBuffer, mime, name, PDFDocument);
             totalPagesAdded += 1;
           } else {
             try {
-              const pagesAdded = await appendPdfPages(mergedPdf, arrayBuffer, PDFDocument);
+              const pagesAdded = await appendPdfAsCompressedJpegs(
+                mergedPdf,
+                arrayBuffer,
+                PDFDocument
+              );
               totalPagesAdded += pagesAdded;
             } catch {
-              await appendImagePage(mergedPdf, arrayBuffer, mime, name, PDFDocument);
+              await appendImageAsCompressedJpeg(
+                mergedPdf,
+                arrayBuffer,
+                mime,
+                name,
+                PDFDocument
+              );
               totalPagesAdded += 1;
             }
           }
@@ -201,7 +234,43 @@ export async function generateApplicantPdf(submission, documents, onProgress, op
   }
 }
 
-async function appendPdfPages(mergedPdf, arrayBuffer, PDFDocument) {
+async function appendPdfAsCompressedJpegs(mergedPdf, arrayBuffer, PDFDocument) {
+  try {
+    const pdfjs = await loadPdfJs();
+    const loadingTask = pdfjs.getDocument({ data: new Uint8Array(arrayBuffer) });
+    const pdf = await loadingTask.promise;
+    const pageCount = pdf.numPages;
+
+    for (let i = 1; i <= pageCount; i++) {
+      const page = await pdf.getPage(i);
+      const baseViewport = page.getViewport({ scale: 1 });
+      const scale = Math.min(
+        MAX_PIXEL_EDGE / baseViewport.width,
+        MAX_PIXEL_EDGE / baseViewport.height,
+        2
+      );
+      const viewport = page.getViewport({ scale });
+
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.floor(viewport.width);
+      canvas.height = Math.floor(viewport.height);
+      const ctx = canvas.getContext("2d", { alpha: false });
+      ctx.fillStyle = "#ffffff";
+      ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+      await page.render({ canvasContext: ctx, viewport }).promise;
+
+      const jpegBytes = await canvasToJpegBytes(canvas, JPEG_QUALITY);
+      await drawJpegOnA4(mergedPdf, jpegBytes);
+    }
+    return pageCount;
+  } catch (err) {
+    console.warn("PDF.js compress path failed, falling back to page copy", err);
+    return appendPdfPagesNative(mergedPdf, arrayBuffer, PDFDocument);
+  }
+}
+
+async function appendPdfPagesNative(mergedPdf, arrayBuffer, PDFDocument) {
   const sourcePdf = await PDFDocument.load(arrayBuffer, {
     ignoreEncryption: true,
   });
@@ -213,7 +282,29 @@ async function appendPdfPages(mergedPdf, arrayBuffer, PDFDocument) {
   return pages.length;
 }
 
-async function appendImagePage(mergedPdf, arrayBuffer, mime, name, PDFDocument) {
+async function appendImageAsCompressedJpeg(mergedPdf, arrayBuffer, mime, name, PDFDocument) {
+  try {
+    const bitmap = await loadImageBitmap(arrayBuffer, mime, name);
+    const { width, height } = scaleToMaxEdge(bitmap.width, bitmap.height, MAX_PIXEL_EDGE);
+
+    const canvas = document.createElement("canvas");
+    canvas.width = width;
+    canvas.height = height;
+    const ctx = canvas.getContext("2d", { alpha: false });
+    ctx.fillStyle = "#ffffff";
+    ctx.fillRect(0, 0, width, height);
+    ctx.drawImage(bitmap, 0, 0, width, height);
+    if (typeof bitmap.close === "function") bitmap.close();
+
+    const jpegBytes = await canvasToJpegBytes(canvas, JPEG_QUALITY);
+    await drawJpegOnA4(mergedPdf, jpegBytes);
+  } catch (err) {
+    console.warn("Image compress failed, embedding original", err);
+    await appendImagePageNative(mergedPdf, arrayBuffer, mime, name);
+  }
+}
+
+async function appendImagePageNative(mergedPdf, arrayBuffer, mime, name) {
   let image;
   const isPng = mime.includes("png") || name.endsWith(".png");
   if (isPng) {
@@ -223,19 +314,76 @@ async function appendImagePage(mergedPdf, arrayBuffer, mime, name, PDFDocument) 
   }
 
   const page = mergedPdf.addPage([A4_WIDTH, A4_HEIGHT]);
-  const margin = 36;
-  const maxW = A4_WIDTH - margin * 2;
-  const maxH = A4_HEIGHT - margin * 2;
-
-  const imgW = image.width;
-  const imgH = image.height;
-  const scale = Math.min(maxW / imgW, maxH / imgH, 1);
-  const drawW = imgW * scale;
-  const drawH = imgH * scale;
+  const maxW = A4_WIDTH - PAGE_MARGIN * 2;
+  const maxH = A4_HEIGHT - PAGE_MARGIN * 2;
+  const scale = Math.min(maxW / image.width, maxH / image.height, 1);
+  const drawW = image.width * scale;
+  const drawH = image.height * scale;
   const x = (A4_WIDTH - drawW) / 2;
   const y = (A4_HEIGHT - drawH) / 2;
-
   page.drawImage(image, { x, y, width: drawW, height: drawH });
+}
+
+async function drawJpegOnA4(mergedPdf, jpegBytes) {
+  const image = await mergedPdf.embedJpg(jpegBytes);
+  const page = mergedPdf.addPage([A4_WIDTH, A4_HEIGHT]);
+  const maxW = A4_WIDTH - PAGE_MARGIN * 2;
+  const maxH = A4_HEIGHT - PAGE_MARGIN * 2;
+  const scale = Math.min(maxW / image.width, maxH / image.height, 1);
+  const drawW = image.width * scale;
+  const drawH = image.height * scale;
+  const x = (A4_WIDTH - drawW) / 2;
+  const y = (A4_HEIGHT - drawH) / 2;
+  page.drawImage(image, { x, y, width: drawW, height: drawH });
+}
+
+function scaleToMaxEdge(w, h, maxEdge) {
+  const longest = Math.max(w, h);
+  if (longest <= maxEdge) return { width: w, height: h };
+  const s = maxEdge / longest;
+  return {
+    width: Math.max(1, Math.round(w * s)),
+    height: Math.max(1, Math.round(h * s)),
+  };
+}
+
+function canvasToJpegBytes(canvas, quality) {
+  return new Promise((resolve, reject) => {
+    canvas.toBlob(
+      async (blob) => {
+        if (!blob) {
+          reject(new Error("JPEG encode failed"));
+          return;
+        }
+        const buf = await blob.arrayBuffer();
+        resolve(new Uint8Array(buf));
+      },
+      "image/jpeg",
+      quality
+    );
+  });
+}
+
+async function loadImageBitmap(arrayBuffer, mime, name) {
+  const isPng = String(mime).includes("png") || String(name).endsWith(".png");
+  const type = isPng ? "image/png" : "image/jpeg";
+  const blob = new Blob([arrayBuffer], { type });
+  if (typeof createImageBitmap === "function") {
+    return createImageBitmap(blob);
+  }
+  return new Promise((resolve, reject) => {
+    const url = URL.createObjectURL(blob);
+    const img = new Image();
+    img.onload = () => {
+      URL.revokeObjectURL(url);
+      resolve(img);
+    };
+    img.onerror = () => {
+      URL.revokeObjectURL(url);
+      reject(new Error("Image load failed"));
+    };
+    img.src = url;
+  });
 }
 
 async function addWarningsPage(mergedPdf, warnings) {
