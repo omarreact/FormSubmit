@@ -14,6 +14,13 @@ import { APP_CONFIG } from "./config.js";
 const A4_WIDTH = 595.28;
 const A4_HEIGHT = 841.89;
 
+/**
+ * Main entry: build and return a Blob of the combined PDF
+ * @param {Object} submission - submission record (with id)
+ * @param {Array} documents - document metadata from storage
+ * @param {Function} onProgress - ({ status, percent, message }) => void
+ * @param {Object} [options]
+ */
 export async function generateApplicantPdf(submission, documents, onProgress, options = {}) {
   const progress = (p) => {
     if (typeof onProgress === "function") onProgress(p);
@@ -28,24 +35,28 @@ export async function generateApplicantPdf(submission, documents, onProgress, op
     const audit = auditDocuments(submission, documents);
 
     progress({ status: STATUS.AUDITING, percent: 10, message: "Auditing required documents…" });
+
     progress({ status: STATUS.FETCHING, percent: 15, message: "Loading document metadata…" });
 
+    // Sort for correct order
     const sorted = sortDocumentsForPdf(documents);
     const groups = groupByCategory(sorted);
 
+    // Dynamic import pdf-lib
     const { PDFDocument, rgb } = await import(
       "https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/+esm"
     );
 
     const mergedPdf = await PDFDocument.create();
     mergedPdf.setTitle(
-      `${submission.applicantName || "Applicant"} – Visa Application Dossier`
+      `${submission.applicantName || "Applicant"} - Visa Application Dossier`
     );
     mergedPdf.setAuthor("Visa Application Document Submission System");
     mergedPdf.setCreator("Visa Dossier Generator");
     mergedPdf.setProducer("pdf-lib");
     mergedPdf.setCreationDate(new Date());
 
+    // Summary pages first
     progress({ status: STATUS.PROCESSING, percent: 20, message: "Creating checklist summary…" });
     await addSummaryPages(mergedPdf, submission, audit, { warnings: [] });
 
@@ -62,6 +73,7 @@ export async function generateApplicantPdf(submission, documents, onProgress, op
       const order = rule ? rule.order : 999;
       const label = rule ? rule.label : group.key;
 
+      // Optional separator (only if group has files)
       if (group.docs.length > 0 && options.addSeparators !== false) {
         await addSeparatorPage(
           mergedPdf,
@@ -94,15 +106,15 @@ export async function generateApplicantPdf(submission, documents, onProgress, op
         } catch (err) {
           console.warn("Failed to download document", docMeta, err);
           warnings.push(
-            `Could not include: ${docMeta.fileName || docMeta.originalFileName || "unknown"} — download failed`
+            `Could not include: ${docMeta.fileName || docMeta.originalFileName || "unknown"} - download failed`
           );
           processed++;
           continue;
         }
 
-        let hash;
+        // Deduplicate by SHA-256
         try {
-          hash = await computeSHA256(arrayBuffer);
+          const hash = await computeSHA256(arrayBuffer);
           if (seenHashes.has(hash)) {
             warnings.push(
               `Duplicate document skipped: ${docMeta.fileName || docMeta.originalFileName}`
@@ -111,7 +123,9 @@ export async function generateApplicantPdf(submission, documents, onProgress, op
             continue;
           }
           seenHashes.add(hash);
-        } catch (e) {}
+        } catch (e) {
+          // continue without hash
+        }
 
         const mime = (docMeta.mimeType || "").toLowerCase();
         const name = (docMeta.fileName || docMeta.originalFileName || "").toLowerCase();
@@ -148,7 +162,7 @@ export async function generateApplicantPdf(submission, documents, onProgress, op
         } catch (err) {
           console.warn("Failed to process document", docMeta, err);
           warnings.push(
-            `Could not include: ${docMeta.fileName || docMeta.originalFileName || "unknown"} — ${err.message || "corrupted or unsupported"}`
+            `Could not include: ${docMeta.fileName || docMeta.originalFileName || "unknown"} - ${err.message || "corrupted or unsupported"}`
           );
         }
 
@@ -240,6 +254,7 @@ async function addWarningsPage(mergedPdf, warnings) {
   const { StandardFonts, rgb } = await import(
     "https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/+esm"
   );
+  const { sanitizePdfText } = await import("./pdf-summary.js");
   const font = await mergedPdf.embedFont(StandardFonts.Helvetica);
   const fontBold = await mergedPdf.embedFont(StandardFonts.HelveticaBold);
   let page = mergedPdf.addPage([A4_WIDTH, A4_HEIGHT]);
@@ -259,8 +274,9 @@ async function addWarningsPage(mergedPdf, warnings) {
       page = mergedPdf.addPage([A4_WIDTH, A4_HEIGHT]);
       y = A4_HEIGHT - 50;
     }
-    const text = `• ${w}`;
-    page.drawText(text.slice(0, 95), {
+    const text = sanitizePdfText(`- ${w}`).slice(0, 95);
+    if (!text) continue;
+    page.drawText(text, {
       x: 50,
       y,
       size: 9,
@@ -280,6 +296,9 @@ function buildFileName(submission) {
   return `${name}_Visa_Application_Dossier_${date}.pdf`;
 }
 
+/**
+ * Trigger browser download of a Blob
+ */
 export function downloadBlob(blob, fileName) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
