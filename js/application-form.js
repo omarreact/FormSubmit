@@ -97,6 +97,7 @@ function buildUploadFields() {
         categoryKey: rule.key,
         multiple: !!rule.multiple,
         container: wrap,
+        enableScan: rule.key === "apostilleCopies" || rule.key === "apostille",
       });
       uploadControllers.set(rule.key, ctrl);
     }
