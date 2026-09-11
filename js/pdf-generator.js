@@ -242,7 +242,7 @@ async function addWarningsPage(mergedPdf, warnings) {
   const { StandardFonts, rgb } = await import(
     "https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/+esm"
   );
-  const { sanitizePdfText } from "./pdf-summary.js";
+  const { sanitizePdfText } = await import("./pdf-summary.js");
   const font = await mergedPdf.embedFont(StandardFonts.Helvetica);
   const fontBold = await mergedPdf.embedFont(StandardFonts.HelveticaBold);
   let page = mergedPdf.addPage([A4_WIDTH, A4_HEIGHT]);
