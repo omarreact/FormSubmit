@@ -5,7 +5,7 @@
 import { getRulesBySection, isDocumentRequired, DOCUMENT_RULES } from "./document-rules.js";
 import { createUploadField, collectAllUploads } from "./uploads.js";
 import { auditDocuments } from "./document-audit.js";
-import { createSubmission } from "./submissions.js";
+import { createSubmission, isRemoteConfigured } from "./submissions.js";
 import { escapeHtml } from "./file-utils.js";
 import { APP_CONFIG } from "./config.js";
 
@@ -213,7 +213,9 @@ async function handleSubmit(e) {
   if (statusEl) {
     statusEl.classList.remove("d-none", "alert-success", "alert-danger");
     statusEl.classList.add("alert-info");
-    statusEl.textContent = "Uploading documents and saving application…";
+    statusEl.textContent = isRemoteConfigured()
+      ? "Uploading documents and saving application…"
+      : "Saving application in this browser (local mode)…";
   }
 
   try {
@@ -238,10 +240,7 @@ async function handleSubmit(e) {
     if (statusEl) {
       statusEl.classList.remove("alert-info");
       statusEl.classList.add("alert-danger");
-      statusEl.textContent =
-        err.message?.includes("Apps Script") || err.message?.includes("configured")
-          ? "Submission failed. Please ensure Google Apps Script is configured correctly (see README)."
-          : `Submission failed: ${err.message || "Unknown error"}`;
+      statusEl.textContent = `Submission failed: ${err.message || "Unknown error"}`;
     }
     submitBtn.disabled = false;
     submitBtn.innerHTML = `<i class="bi bi-send me-1"></i> Submit Application`;
@@ -266,6 +265,8 @@ function bindConditionalRebuild() {
 }
 
 export function initApplicationForm() {
+  const banner = document.getElementById("localModeBanner");
+  if (banner && !isRemoteConfigured()) banner.classList.remove("d-none");
   buildUploadFields();
   bindConditionalRebuild();
   const form = document.getElementById("visaApplicationForm");
