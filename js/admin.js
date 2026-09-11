@@ -13,11 +13,12 @@ import {
   getSubmission,
   getSubmissionDocuments,
   recordPdfGeneration,
+  isRemoteConfigured,
 } from "./submissions.js";
 import { auditDocuments } from "./document-audit.js";
 import { generateApplicantPdf, downloadBlob } from "./pdf-generator.js";
 import { createProgressController, STATUS } from "./pdf-progress.js";
-import { formatDisplayDate, escapeHtml, formatFileSize } from "./file-utils.js";
+import { formatDisplayDate, escapeHtml } from "./file-utils.js";
 
 let allSubmissions = [];
 let progressCtrl = null;
@@ -74,7 +75,6 @@ function renderMetrics(subs) {
     (s) => (s.documentAudit?.completenessPercentage ?? 0) >= 100
   ).length;
   const missing = total - complete;
-
   setText("metricTotal", total);
   setText("metricComplete", complete);
   setText("metricMissing", missing);
@@ -102,16 +102,8 @@ function filterSubmissions(subs) {
     if (f.completeness === "complete" && pct < 100) return false;
     if (f.completeness === "missing" && pct >= 100) return false;
     if (f.search) {
-      const hay = [
-        s.applicantName,
-        s.email,
-        s.phone,
-        s.applicationId,
-        s.passportNumber,
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase();
+      const hay = [s.applicantName, s.email, s.phone, s.applicationId, s.passportNumber]
+        .filter(Boolean).join(" ").toLowerCase();
       if (!hay.includes(f.search)) return false;
     }
     return true;
@@ -126,10 +118,9 @@ function renderTable(subs) {
     tbody.innerHTML = `<tr><td colspan="6" class="text-center text-muted py-4">No applicants found</td></tr>`;
     return;
   }
-  tbody.innerHTML = filtered
-    .map((s) => {
-      const pct = s.documentAudit?.completenessPercentage ?? 0;
-      return `
+  tbody.innerHTML = filtered.map((s) => {
+    const pct = s.documentAudit?.completenessPercentage ?? 0;
+    return `
       <tr>
         <td>
           <div class="fw-medium">${escapeHtml(s.applicantName || "—")}</div>
@@ -141,8 +132,7 @@ function renderTable(subs) {
         <td>${completenessBadge(pct)}</td>
         <td><span class="badge bg-secondary">${escapeHtml(s.status || "submitted")}</span></td>
       </tr>`;
-    })
-    .join("");
+  }).join("");
 }
 
 function populateApplicantDropdown(subs) {
@@ -182,25 +172,16 @@ async function onApplicantSelected() {
   setText("detailEmail", sub.email || "—");
   setText("detailPhone", sub.phone || "—");
   setText("detailAppId", sub.applicationId || sub.id);
-  setText(
-    "detailLevel",
-    sub.applicationLevel === "masters" ? "Master's" : "Bachelor's"
-  );
+  setText("detailLevel", sub.applicationLevel === "masters" ? "Master's" : "Bachelor's");
   setText("detailSubmitted", formatDisplayDate(sub.submittedAt));
   setText("detailCompleteness", `${audit.completenessPercentage}%`);
 
   if (checkList) {
-    checkList.innerHTML = audit.results
-      .map((r) => {
-        const cls = r.uploaded
-          ? "item-ok"
-          : r.required
-            ? "item-missing"
-            : "text-muted";
-        const mark = r.uploaded ? "✓" : r.required ? "⚠ MISSING" : "○";
-        return `<div class="${cls}">${mark} ${escapeHtml(r.label)}</div>`;
-      })
-      .join("");
+    checkList.innerHTML = audit.results.map((r) => {
+      const cls = r.uploaded ? "item-ok" : r.required ? "item-missing" : "text-muted";
+      const mark = r.uploaded ? "✓" : r.required ? "⚠ MISSING" : "○";
+      return `<div class="${cls}">${mark} ${escapeHtml(r.label)}</div>`;
+    }).join("");
   }
 
   const warn = document.getElementById("missingWarning");
@@ -282,31 +263,17 @@ async function handleDownloadPdf() {
 function exportCsv() {
   const rows = filterSubmissions(allSubmissions);
   const headers = [
-    "Application ID",
-    "Applicant",
-    "Email",
-    "Phone",
-    "Level",
-    "Submitted",
-    "Document Count",
-    "Missing Count",
-    "Completeness",
-    "Status",
+    "Application ID", "Applicant", "Email", "Phone", "Level", "Submitted",
+    "Document Count", "Missing Count", "Completeness", "Status",
   ];
   const lines = [headers.join(",")];
   for (const s of rows) {
     const audit = s.documentAudit || {};
     const vals = [
-      s.applicationId || s.id,
-      s.applicantName,
-      s.email,
-      s.phone,
-      s.applicationLevel,
-      s.submittedAt,
-      audit.totalUploadedFiles ?? "",
-      audit.missingCount ?? "",
-      audit.completenessPercentage ?? "",
-      s.status,
+      s.applicationId || s.id, s.applicantName, s.email, s.phone,
+      s.applicationLevel, s.submittedAt,
+      audit.totalUploadedFiles ?? "", audit.missingCount ?? "",
+      audit.completenessPercentage ?? "", s.status,
     ].map((v) => {
       const str = v == null ? "" : String(v);
       if (str.includes(",") || str.includes('"') || str.includes("\n")) {
@@ -329,7 +296,7 @@ async function loadDashboard() {
     const tbody = document.getElementById("applicantsTableBody");
     if (tbody) {
       tbody.innerHTML = `<tr><td colspan="6" class="text-center text-danger py-4">
-        Failed to load submissions. Check Apps Script URL, admin token, and deployment settings.
+        Failed to load submissions.
       </td></tr>`;
     }
   }
@@ -339,13 +306,13 @@ async function loadDashboard() {
 }
 
 export function initAdmin() {
+  const ban = document.getElementById("localModeBannerAdmin");
+  if (ban && !isRemoteConfigured()) ban.classList.remove("d-none");
   document.getElementById("loginForm")?.addEventListener("submit", handleLogin);
   document.getElementById("logoutBtn")?.addEventListener("click", handleLogout);
   document.getElementById("filterSearch")?.addEventListener("input", () => renderTable(allSubmissions));
   document.getElementById("filterLevel")?.addEventListener("change", () => renderTable(allSubmissions));
-  document.getElementById("filterCompleteness")?.addEventListener("change", () =>
-    renderTable(allSubmissions)
-  );
+  document.getElementById("filterCompleteness")?.addEventListener("change", () => renderTable(allSubmissions));
   document.getElementById("applicantSelect")?.addEventListener("change", onApplicantSelected);
   document.getElementById("downloadPdfBtn")?.addEventListener("click", handleDownloadPdf);
   document.getElementById("exportCsvBtn")?.addEventListener("click", exportCsv);
