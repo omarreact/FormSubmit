@@ -1,6 +1,6 @@
 /**
  * PDF Summary / checklist page generation using pdf-lib
- * Standard fonts (Helvetica) only support WinAnsi — sanitize all text.
+ * Standard fonts (Helvetica) only support WinAnsi - sanitize all text.
  */
 
 import { formatDisplayDate } from "./file-utils.js";
@@ -11,22 +11,21 @@ const MARGIN = 50;
 
 /**
  * Strip / replace characters that Helvetica (WinAnsi) cannot encode.
- * Prevents: WinAnsi cannot encode "..." errors.
  */
 export function sanitizePdfText(text) {
   if (text == null) return "";
   return String(text)
-    .replace(/[\u2018\u2019\u201A\u201B]/g, "'") // smart single quotes
-    .replace(/[\u201C\u201D\u201E\u201F]/g, '"') // smart double quotes
-    .replace(/[\u2013\u2014\u2015]/g, "-") // en/em dashes
-    .replace(/\u2026/g, "...") // ellipsis
-    .replace(/[\u00A0\u2000-\u200B\u202F\u205F\u3000]/g, " ") // spaces
+    .replace(/[\u2018\u2019\u201A\u201B]/g, "'")
+    .replace(/[\u201C\u201D\u201E\u201F]/g, '"')
+    .replace(/[\u2013\u2014\u2015]/g, "-")
+    .replace(/\u2026/g, "...")
+    .replace(/[\u00A0\u2000-\u200B\u202F\u205F\u3000]/g, " ")
     .replace(/[⚠△▲]/g, "!")
     .replace(/[✓✔☑]/g, "[OK]")
     .replace(/[✗✘☒×]/g, "[X]")
     .replace(/[•●◦▪▫]/g, "-")
     .replace(/[○◯]/g, "o")
-    .replace(/[^\x09\x0A\x0D\x20-\x7E\xA0-\xFF]/g, ""); // drop anything outside Latin-1/WinAnsi-ish
+    .replace(/[^\x09\x0A\x0D\x20-\x7E\xA0-\xFF]/g, "");
 }
 
 export async function addSummaryPages(pdfDoc, submission, audit, options = {}) {
@@ -60,7 +59,6 @@ export async function addSummaryPages(pdfDoc, submission, audit, options = {}) {
     }
   };
 
-  // Title
   drawText("VISA APPLICATION DOSSIER", MARGIN, y, 18, true, rgb(0.05, 0.2, 0.45));
   y -= 28;
 
@@ -74,7 +72,6 @@ export async function addSummaryPages(pdfDoc, submission, audit, options = {}) {
   );
   y -= 22;
 
-  // Applicant block
   const lines = [
     ["Applicant", submission.applicantName],
     ["Application ID", submission.applicationId],
@@ -103,7 +100,6 @@ export async function addSummaryPages(pdfDoc, submission, audit, options = {}) {
   y -= 10;
   newPageIfNeeded(30);
 
-  // Completeness
   const pct = audit.completenessPercentage ?? 0;
   const incomplete = audit.missingCount > 0;
   drawText("Document Completeness", MARGIN, y, 12, true);
@@ -141,7 +137,6 @@ export async function addSummaryPages(pdfDoc, submission, audit, options = {}) {
     y -= 14;
   }
 
-  // Missing required list
   if (audit.missingRequired && audit.missingRequired.length > 0) {
     y -= 12;
     newPageIfNeeded(40);
@@ -154,7 +149,6 @@ export async function addSummaryPages(pdfDoc, submission, audit, options = {}) {
     });
   }
 
-  // Processing warnings (corrupted files etc.)
   if (options.warnings && options.warnings.length > 0) {
     y -= 12;
     newPageIfNeeded(40);
@@ -167,7 +161,6 @@ export async function addSummaryPages(pdfDoc, submission, audit, options = {}) {
     }
   }
 
-  // Footer note
   y -= 20;
   newPageIfNeeded(30);
   drawText(
@@ -182,9 +175,6 @@ export async function addSummaryPages(pdfDoc, submission, audit, options = {}) {
   return pdfDoc;
 }
 
-/**
- * Optional separator page before a document category
- */
 export async function addSeparatorPage(pdfDoc, order, label, applicantName) {
   const { StandardFonts, rgb } = await import(
     "https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/+esm"
@@ -225,6 +215,106 @@ export async function addSeparatorPage(pdfDoc, order, label, applicantName) {
     font,
     color: rgb(0.35, 0.35, 0.35),
   });
+}
+
+/**
+ * Scan-results page placed under each apostille document.
+ */
+export async function addApostilleScanResultPage(pdfDoc, docMeta, scan) {
+  const { StandardFonts, rgb } = await import(
+    "https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/+esm"
+  );
+  const font = await pdfDoc.embedFont(StandardFonts.Helvetica);
+  const fontBold = await pdfDoc.embedFont(StandardFonts.HelveticaBold);
+
+  const page = pdfDoc.addPage([A4_WIDTH, A4_HEIGHT]);
+  let y = A4_HEIGHT - MARGIN;
+
+  const draw = (text, size = 11, bold = false, color = rgb(0.1, 0.1, 0.1)) => {
+    const safe = sanitizePdfText(text);
+    if (!safe) return;
+    page.drawText(safe, {
+      x: MARGIN,
+      y,
+      size,
+      font: bold ? fontBold : font,
+      color,
+    });
+  };
+
+  draw("APOSTILLE / ATTESTATION - SCAN REPORT", 14, true, rgb(0.05, 0.2, 0.45));
+  y -= 22;
+
+  draw(
+    "Client-side verification of the file above (no external OCR).",
+    9,
+    false,
+    rgb(0.4, 0.4, 0.4)
+  );
+  y -= 20;
+
+  const fileLabel = docMeta.originalFileName || docMeta.fileName || "document";
+  const rows = [
+    ["File name", fileLabel],
+    ["Category", docMeta.categoryName || docMeta.categoryKey || "Apostille"],
+    ["Scan status", String(scan?.status || "unknown").toUpperCase()],
+    ["Summary", scan?.summary || "-"],
+    ["Type", scan?.fileType || "-"],
+    ["Size", scan?.sizeLabel || "-"],
+  ];
+
+  if (scan?.pageCount != null) {
+    rows.push(["Page count", String(scan.pageCount)]);
+  }
+  if (scan?.width && scan?.height) {
+    rows.push(["Dimensions", `${scan.width} x ${scan.height} px`]);
+  }
+  if (scan?.apostilleLikely) {
+    rows.push([
+      "Apostille hint",
+      "Yes - filename suggests apostille / legalization",
+    ]);
+  }
+
+  for (const [label, value] of rows) {
+    page.drawText(sanitizePdfText(`${label}:`), {
+      x: MARGIN,
+      y,
+      size: 10,
+      font: fontBold,
+      color: rgb(0.15, 0.15, 0.15),
+    });
+    const val = sanitizePdfText(String(value ?? "-"));
+    page.drawText(val.slice(0, 70), {
+      x: MARGIN + 120,
+      y,
+      size: 10,
+      font,
+      color: rgb(0.1, 0.1, 0.1),
+    });
+    y -= 16;
+  }
+
+  y -= 8;
+  draw("Notes", 11, true, rgb(0.05, 0.2, 0.45));
+  y -= 16;
+
+  const notes = scan?.notes?.length ? scan.notes : ["No additional notes."];
+  for (const note of notes) {
+    if (y < MARGIN + 40) break;
+    draw(`- ${note}`, 10, false, rgb(0.25, 0.25, 0.25));
+    y -= 14;
+  }
+
+  y -= 16;
+  if (y > MARGIN + 30) {
+    draw(
+      "This report sits directly under the apostille document pages above.",
+      8,
+      false,
+      rgb(0.45, 0.45, 0.45)
+    );
+  }
 }
 
 function formatSponsorship(type) {
