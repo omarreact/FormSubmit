@@ -1,5 +1,5 @@
 /**
- * PDF Dossier Generator – core merging logic using pdf-lib
+ * PDF Dossier Generator - core merging logic using pdf-lib
  * Produces a single self-contained PDF with summary + all uploaded pages.
  */
 
@@ -7,20 +7,20 @@ import { auditDocuments, sortDocumentsForPdf, groupByCategory } from "./document
 import { DOCUMENT_RULES } from "./document-rules.js";
 import { downloadDocumentAsArrayBuffer } from "./submissions.js";
 import { computeSHA256 } from "./file-utils.js";
-import { addSummaryPages, addSeparatorPage } from "./pdf-summary.js";
+import {
+  addSummaryPages,
+  addSeparatorPage,
+  addApostilleScanResultPage,
+} from "./pdf-summary.js";
+import { scanArrayBuffer } from "./file-scan.js";
 import { STATUS } from "./pdf-progress.js";
 import { APP_CONFIG } from "./config.js";
+
+const APOSTILLE_KEYS = new Set(["apostilleCopies", "apostille"]);
 
 const A4_WIDTH = 595.28;
 const A4_HEIGHT = 841.89;
 
-/**
- * Main entry: build and return a Blob of the combined PDF
- * @param {Object} submission - submission record (with id)
- * @param {Array} documents - document metadata from storage
- * @param {Function} onProgress - ({ status, percent, message }) => void
- * @param {Object} [options]
- */
 export async function generateApplicantPdf(submission, documents, onProgress, options = {}) {
   const progress = (p) => {
     if (typeof onProgress === "function") onProgress(p);
@@ -38,11 +38,9 @@ export async function generateApplicantPdf(submission, documents, onProgress, op
 
     progress({ status: STATUS.FETCHING, percent: 15, message: "Loading document metadata…" });
 
-    // Sort for correct order
     const sorted = sortDocumentsForPdf(documents);
     const groups = groupByCategory(sorted);
 
-    // Dynamic import pdf-lib
     const { PDFDocument, rgb } = await import(
       "https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/+esm"
     );
@@ -56,7 +54,6 @@ export async function generateApplicantPdf(submission, documents, onProgress, op
     mergedPdf.setProducer("pdf-lib");
     mergedPdf.setCreationDate(new Date());
 
-    // Summary pages first
     progress({ status: STATUS.PROCESSING, percent: 20, message: "Creating checklist summary…" });
     await addSummaryPages(mergedPdf, submission, audit, { warnings: [] });
 
@@ -73,7 +70,6 @@ export async function generateApplicantPdf(submission, documents, onProgress, op
       const order = rule ? rule.order : 999;
       const label = rule ? rule.label : group.key;
 
-      // Optional separator (only if group has files)
       if (group.docs.length > 0 && options.addSeparators !== false) {
         await addSeparatorPage(
           mergedPdf,
@@ -112,7 +108,6 @@ export async function generateApplicantPdf(submission, documents, onProgress, op
           continue;
         }
 
-        // Deduplicate by SHA-256
         try {
           const hash = await computeSHA256(arrayBuffer);
           if (seenHashes.has(hash)) {
@@ -157,6 +152,30 @@ export async function generateApplicantPdf(submission, documents, onProgress, op
             } catch {
               await appendImagePage(mergedPdf, arrayBuffer, mime, name, PDFDocument);
               totalPagesAdded += 1;
+            }
+          }
+
+          // After each apostille file: append client-side scan result page
+          const catKey = docMeta.categoryKey || group.key;
+          if (APOSTILLE_KEYS.has(catKey)) {
+            try {
+              progress({
+                status: STATUS.PROCESSING,
+                percent: pct + 3,
+                message: `Scanning apostille: ${docMeta.fileName || "file"}…`,
+              });
+              const scan = await scanArrayBuffer(arrayBuffer, {
+                fileName: docMeta.originalFileName || docMeta.fileName,
+                mimeType: docMeta.mimeType,
+                size: docMeta.size || arrayBuffer.byteLength,
+              });
+              await addApostilleScanResultPage(mergedPdf, docMeta, scan);
+              totalPagesAdded += 1;
+            } catch (scanErr) {
+              console.warn("Apostille scan page failed", scanErr);
+              warnings.push(
+                `Apostille scan report skipped for: ${docMeta.fileName || "file"}`
+              );
             }
           }
         } catch (err) {
@@ -296,9 +315,6 @@ function buildFileName(submission) {
   return `${name}_Visa_Application_Dossier_${date}.pdf`;
 }
 
-/**
- * Trigger browser download of a Blob
- */
 export function downloadBlob(blob, fileName) {
   const url = URL.createObjectURL(blob);
   const a = document.createElement("a");
