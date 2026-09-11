@@ -1,0 +1,149 @@
+:root {
+  --brand-primary: #0d3b66;
+  --brand-accent: #1a659e;
+  --brand-success: #198754;
+  --brand-warning: #c45c00;
+  --brand-danger: #b02a37;
+  --surface: #f7f9fc;
+  --card-radius: 0.75rem;
+}
+
+body {
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  background-color: var(--surface);
+  color: #1a1a1a;
+  min-height: 100vh;
+}
+
+.app-header {
+  background: linear-gradient(135deg, var(--brand-primary), var(--brand-accent));
+  color: #fff;
+  padding: 1.25rem 0;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+}
+
+.app-header h1 {
+  font-size: 1.35rem;
+  font-weight: 700;
+  margin: 0;
+  letter-spacing: 0.02em;
+}
+
+.app-header .subtitle {
+  font-size: 0.9rem;
+  opacity: 0.9;
+  margin: 0.25rem 0 0;
+}
+
+.card {
+  border: none;
+  border-radius: var(--card-radius);
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+}
+
+.card-header {
+  background: #fff;
+  border-bottom: 1px solid #e9ecef;
+  font-weight: 600;
+}
+
+.section-title {
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--brand-primary);
+}
+
+.required-mark {
+  color: var(--brand-danger);
+}
+
+.upload-file-item {
+  transition: background 0.15s ease;
+}
+
+.upload-file-item:hover {
+  background: #eef3f8 !important;
+}
+
+.sticky-submit {
+  position: sticky;
+  bottom: 0;
+  z-index: 1020;
+  background: rgba(255, 255, 255, 0.95);
+  backdrop-filter: blur(6px);
+  border-top: 1px solid #dee2e6;
+  padding: 0.75rem 0;
+  box-shadow: 0 -2px 10px rgba(0, 0, 0, 0.06);
+}
+
+.progress {
+  height: 1.25rem;
+}
+
+.progress-bar {
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.checklist-item-ok {
+  color: var(--brand-success);
+}
+
+.checklist-item-missing {
+  color: var(--brand-danger);
+  font-weight: 600;
+}
+
+.checklist-item-optional {
+  color: #6c757d;
+}
+
+.table-responsive {
+  border-radius: var(--card-radius);
+}
+
+.badge-completeness-high {
+  background-color: var(--brand-success) !important;
+}
+
+.badge-completeness-mid {
+  background-color: #d97706 !important;
+}
+
+.badge-completeness-low {
+  background-color: var(--brand-danger) !important;
+}
+
+.admin-login-card {
+  max-width: 420px;
+  margin: 3rem auto;
+}
+
+.dossier-card {
+  border-left: 4px solid var(--brand-accent);
+}
+
+footer.app-footer {
+  margin-top: 3rem;
+  padding: 1.5rem 0;
+  font-size: 0.85rem;
+  color: #6c757d;
+  border-top: 1px solid #e9ecef;
+  background: #fff;
+}
+
+/* Focus visibility for a11y */
+:focus-visible {
+  outline: 3px solid var(--brand-accent);
+  outline-offset: 2px;
+}
+
+/* Mobile tweaks */
+@media (max-width: 576px) {
+  .app-header h1 {
+    font-size: 1.15rem;
+  }
+  .accordion-button {
+    font-size: 0.95rem;
+  }
+}
