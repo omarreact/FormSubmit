@@ -1,6 +1,6 @@
 /**
  * Submissions layer — Google Sheets + Drive (via Apps Script)
- * Keeps the same function names used by application-form.js and admin.js
+ * or local IndexedDB when Apps Script is not configured.
  */
 
 export {
@@ -11,4 +11,5 @@ export {
   downloadDocumentAsArrayBuffer,
   addDocumentsToSubmission,
   recordPdfGeneration,
+  isRemoteConfigured,
 } from "./sheets-api.js";
