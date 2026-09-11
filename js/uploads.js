@@ -1,21 +1,19 @@
 /**
- * Reusable upload component logic
- * Manages file selection, validation, preview list, and removal.
+ * Reusable upload component — selection, validation, scan results, removal.
  */
 
 import { validateFile, formatFileSize, escapeHtml } from "./file-utils.js";
+import { scanFile } from "./file-scan.js";
 
-/**
- * Create an upload field controller for a single category.
- * @param {Object} options
- * @param {string} options.categoryKey
- * @param {boolean} options.multiple
- * @param {HTMLElement} options.container - element that holds the file list + input
- * @param {Function} [options.onChange]
- */
-export function createUploadField({ categoryKey, multiple = false, container, onChange }) {
+export function createUploadField({
+  categoryKey,
+  multiple = false,
+  container,
+  onChange,
+  enableScan = false,
+}) {
   const state = {
-    files: [], // { id, file, documentDate }
+    files: [],
   };
 
   const listEl = container.querySelector("[data-upload-list]");
@@ -23,36 +21,91 @@ export function createUploadField({ categoryKey, multiple = false, container, on
   const dateEl = container.querySelector("[data-document-date]");
   const errorEl = container.querySelector("[data-upload-error]");
 
+  function statusBadge(scan, scanning) {
+    if (scanning) return `<span class="badge bg-info text-dark">Scanning…</span>`;
+    if (!scan) return "";
+    if (scan.status === "ok") return `<span class="badge bg-success">Scan OK</span>`;
+    if (scan.status === "warning") return `<span class="badge bg-warning text-dark">Scan warning</span>`;
+    return `<span class="badge bg-danger">Scan failed</span>`;
+  }
+
   function render() {
     if (!listEl) return;
     if (state.files.length === 0) {
       listEl.innerHTML = `<div class="text-muted small">No files selected</div>`;
       return;
     }
-    listEl.innerHTML = state.files
-      .map(
-        (item, idx) => `
-      <div class="upload-file-item d-flex align-items-center gap-2 mb-1 p-2 border rounded bg-light" data-idx="${idx}">
-        <i class="bi bi-file-earmark-check text-success"></i>
-        <div class="flex-grow-1 overflow-hidden">
-          <div class="text-truncate fw-medium small">${escapeHtml(item.file.name)}</div>
-          <div class="text-muted" style="font-size:0.75rem">${formatFileSize(item.file.size)} · ${escapeHtml(item.file.type || "unknown")}</div>
+    listEl.innerHTML =
+      state.files
+        .map((item, idx) => {
+          const scan = item.scan;
+          const notesHtml =
+            scan && scan.notes && scan.notes.length
+              ? `<ul class="mb-0 mt-1 ps-3" style="font-size:0.75rem">${scan.notes
+                  .map((n) => `<li>${escapeHtml(n)}</li>`)
+                  .join("")}</ul>`
+              : "";
+          const summary = item.scanning
+            ? "Reading file…"
+            : scan
+              ? escapeHtml(scan.summary)
+              : "";
+          return `
+      <div class="upload-file-item mb-2 p-2 border rounded bg-light" data-idx="${idx}">
+        <div class="d-flex align-items-center gap-2">
+          <i class="bi bi-file-earmark-check text-success"></i>
+          <div class="flex-grow-1 overflow-hidden">
+            <div class="text-truncate fw-medium small">${escapeHtml(item.file.name)}</div>
+            <div class="text-muted" style="font-size:0.75rem">${formatFileSize(item.file.size)} · ${escapeHtml(item.file.type || "unknown")}</div>
+          </div>
+          ${statusBadge(scan, item.scanning)}
+          <button type="button" class="btn btn-sm btn-outline-danger" data-remove="${idx}" aria-label="Remove file">
+            <i class="bi bi-x-lg"></i>
+          </button>
         </div>
-        <button type="button" class="btn btn-sm btn-outline-danger" data-remove="${idx}" aria-label="Remove file">
-          <i class="bi bi-x-lg"></i>
-        </button>
-      </div>`
-      )
-      .join("") +
+        ${
+          enableScan
+            ? `<div class="mt-1 small ${scan?.status === "error" ? "text-danger" : "text-muted"}" data-scan-result>
+            ${summary}${notesHtml}
+            ${
+              scan && scan.status === "ok"
+                ? `<div class="text-success mt-1" style="font-size:0.75rem"><i class="bi bi-check2-circle"></i> Ready to include in the applicant PDF dossier</div>`
+                : ""
+            }
+          </div>`
+            : ""
+        }
+      </div>`;
+        })
+        .join("") +
       (state.files.length > 1
         ? `<div class="small text-muted mt-1">${state.files.length} files uploaded</div>`
         : "");
   }
 
   function emitChange() {
-    if (typeof onChange === "function") {
-      onChange(categoryKey, state.files);
+    if (typeof onChange === "function") onChange(categoryKey, state.files);
+  }
+
+  async function runScan(item) {
+    if (!enableScan) return;
+    item.scanning = true;
+    item.scan = null;
+    render();
+    try {
+      item.scan = await scanFile(item.file);
+    } catch (e) {
+      item.scan = {
+        status: "error",
+        summary: "Scan failed",
+        fileType: "unknown",
+        sizeLabel: formatFileSize(item.file.size),
+        notes: [e.message || "Unknown error"],
+      };
     }
+    item.scanning = false;
+    render();
+    emitChange();
   }
 
   function addFiles(fileList) {
@@ -65,14 +118,16 @@ export function createUploadField({ categoryKey, multiple = false, container, on
         if (errorEl) errorEl.textContent = v.error;
         continue;
       }
-      if (!multiple) {
-        state.files = [];
-      }
-      state.files.push({
+      if (!multiple) state.files = [];
+      const item = {
         id: `${Date.now()}_${Math.random().toString(36).slice(2, 7)}`,
         file,
         documentDate: dateEl ? dateEl.value || null : null,
-      });
+        scanning: false,
+        scan: null,
+      };
+      state.files.push(item);
+      if (enableScan) runScan(item);
     }
     render();
     emitChange();
@@ -81,7 +136,6 @@ export function createUploadField({ categoryKey, multiple = false, container, on
   if (inputEl) {
     inputEl.addEventListener("change", (e) => {
       addFiles(e.target.files);
-      // reset so same file can be re-selected after remove
       inputEl.value = "";
     });
   }
@@ -110,7 +164,12 @@ export function createUploadField({ categoryKey, multiple = false, container, on
   render();
 
   return {
-    getFiles: () => state.files.map((f) => ({ file: f.file, documentDate: f.documentDate })),
+    getFiles: () =>
+      state.files.map((f) => ({
+        file: f.file,
+        documentDate: f.documentDate,
+        scan: f.scan || null,
+      })),
     getRaw: () => state.files,
     clear: () => {
       state.files = [];
@@ -135,11 +194,6 @@ export function createUploadField({ categoryKey, multiple = false, container, on
   };
 }
 
-/**
- * Collect all files from a map of upload controllers
- * @param {Map|Object} controllers - key -> controller
- * @returns {Array<{categoryKey, files: File[], documentDate}>}
- */
 export function collectAllUploads(controllers) {
   const result = [];
   const entries =
@@ -150,7 +204,6 @@ export function collectAllUploads(controllers) {
   for (const [key, ctrl] of entries) {
     const items = ctrl.getFiles();
     if (items.length === 0) continue;
-    // group by documentDate if mixed (usually same)
     const byDate = {};
     for (const item of items) {
       const d = item.documentDate || "_none";
