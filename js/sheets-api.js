@@ -1,17 +1,22 @@
 /**
- * Client for Google Apps Script Web App (Sheets + Drive backend)
+ * Persistence API — Google Apps Script (Sheets + Drive) OR local IndexedDB fallback.
  */
 
 import { GOOGLE_CONFIG, APP_CONFIG } from "./config.js";
 import { generateId, sanitizeFileName } from "./file-utils.js";
 import { DOCUMENT_RULES } from "./document-rules.js";
 import { auditDocuments } from "./document-audit.js";
+import * as localApi from "./local-api.js";
+
+export function isRemoteConfigured() {
+  return !!(
+    GOOGLE_CONFIG.webAppUrl &&
+    !String(GOOGLE_CONFIG.webAppUrl).includes("YOUR_APPS_SCRIPT")
+  );
+}
 
 function assertConfigured() {
-  if (
-    !GOOGLE_CONFIG.webAppUrl ||
-    GOOGLE_CONFIG.webAppUrl.includes("YOUR_APPS_SCRIPT")
-  ) {
+  if (!isRemoteConfigured()) {
     throw new Error(
       "Google Apps Script Web App URL is not configured. Update js/config.js (see README)."
     );
@@ -55,6 +60,10 @@ function fileToBase64(file) {
 }
 
 export async function createSubmission(applicantData, filesByCategory) {
+  if (!isRemoteConfigured()) {
+    return localApi.createSubmission(applicantData, filesByCategory);
+  }
+
   const uploadedMeta = [];
   for (const group of filesByCategory) {
     for (const file of group.files) {
@@ -144,6 +153,7 @@ export async function createSubmission(applicantData, filesByCategory) {
 }
 
 export async function listSubmissions() {
+  if (!isRemoteConfigured()) return localApi.listSubmissions();
   const data = await apiPost({
     action: "listSubmissions",
     adminToken: GOOGLE_CONFIG.adminToken,
@@ -152,6 +162,7 @@ export async function listSubmissions() {
 }
 
 export async function getSubmission(submissionId) {
+  if (!isRemoteConfigured()) return localApi.getSubmission(submissionId);
   const data = await apiPost({
     action: "getSubmission",
     adminToken: GOOGLE_CONFIG.adminToken,
@@ -161,6 +172,7 @@ export async function getSubmission(submissionId) {
 }
 
 export async function getSubmissionDocuments(submissionId) {
+  if (!isRemoteConfigured()) return localApi.getSubmissionDocuments(submissionId);
   const data = await apiPost({
     action: "getDocuments",
     adminToken: GOOGLE_CONFIG.adminToken,
@@ -170,6 +182,9 @@ export async function getSubmissionDocuments(submissionId) {
 }
 
 export async function downloadDocumentAsArrayBuffer(driveFileId) {
+  if (!isRemoteConfigured()) {
+    return localApi.downloadDocumentAsArrayBuffer(driveFileId);
+  }
   const data = await apiPost({
     action: "getFile",
     adminToken: GOOGLE_CONFIG.adminToken,
@@ -190,6 +205,15 @@ export async function addDocumentsToSubmission(
   filesByCategory,
   applicantForAudit
 ) {
+  if (!isRemoteConfigured()) {
+    return localApi.addDocumentsToSubmission(
+      submissionId,
+      driveFolderId,
+      applicationId,
+      filesByCategory,
+      applicantForAudit
+    );
+  }
   const existing = await getSubmissionDocuments(submissionId);
   const newMeta = [...existing];
 
@@ -240,6 +264,9 @@ export async function addDocumentsToSubmission(
 }
 
 export async function recordPdfGeneration(submissionId, meta) {
+  if (!isRemoteConfigured()) {
+    return localApi.recordPdfGeneration(submissionId, meta);
+  }
   try {
     await apiPost({
       action: "recordPdfGeneration",
