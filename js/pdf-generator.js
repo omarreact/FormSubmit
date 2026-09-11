@@ -7,16 +7,9 @@ import { auditDocuments, sortDocumentsForPdf, groupByCategory } from "./document
 import { DOCUMENT_RULES } from "./document-rules.js";
 import { downloadDocumentAsArrayBuffer } from "./submissions.js";
 import { computeSHA256 } from "./file-utils.js";
-import {
-  addSummaryPages,
-  addSeparatorPage,
-  addApostilleScanResultPage,
-} from "./pdf-summary.js";
-import { scanArrayBuffer } from "./file-scan.js";
+import { addSummaryPages, addSeparatorPage } from "./pdf-summary.js";
 import { STATUS } from "./pdf-progress.js";
 import { APP_CONFIG } from "./config.js";
-
-const APOSTILLE_KEYS = new Set(["apostilleCopies", "apostille"]);
 
 const A4_WIDTH = 595.28;
 const A4_HEIGHT = 841.89;
@@ -154,30 +147,6 @@ export async function generateApplicantPdf(submission, documents, onProgress, op
               totalPagesAdded += 1;
             }
           }
-
-          // After each apostille file: append client-side scan result page
-          const catKey = docMeta.categoryKey || group.key;
-          if (APOSTILLE_KEYS.has(catKey)) {
-            try {
-              progress({
-                status: STATUS.PROCESSING,
-                percent: pct + 3,
-                message: `Scanning apostille: ${docMeta.fileName || "file"}…`,
-              });
-              const scan = await scanArrayBuffer(arrayBuffer, {
-                fileName: docMeta.originalFileName || docMeta.fileName,
-                mimeType: docMeta.mimeType,
-                size: docMeta.size || arrayBuffer.byteLength,
-              });
-              await addApostilleScanResultPage(mergedPdf, docMeta, scan);
-              totalPagesAdded += 1;
-            } catch (scanErr) {
-              console.warn("Apostille scan page failed", scanErr);
-              warnings.push(
-                `Apostille scan report skipped for: ${docMeta.fileName || "file"}`
-              );
-            }
-          }
         } catch (err) {
           console.warn("Failed to process document", docMeta, err);
           warnings.push(
@@ -273,7 +242,7 @@ async function addWarningsPage(mergedPdf, warnings) {
   const { StandardFonts, rgb } = await import(
     "https://cdn.jsdelivr.net/npm/pdf-lib@1.17.1/+esm"
   );
-  const { sanitizePdfText } = await import("./pdf-summary.js");
+  const { sanitizePdfText } from "./pdf-summary.js";
   const font = await mergedPdf.embedFont(StandardFonts.Helvetica);
   const fontBold = await mergedPdf.embedFont(StandardFonts.HelveticaBold);
   let page = mergedPdf.addPage([A4_WIDTH, A4_HEIGHT]);
