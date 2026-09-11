@@ -1,0 +1,62 @@
+/* Admin dashboard styles */
+
+.metric-card {
+  border-radius: var(--card-radius);
+  padding: 1.25rem;
+  background: #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+  height: 100%;
+}
+
+.metric-card .metric-value {
+  font-size: 1.75rem;
+  font-weight: 700;
+  color: var(--brand-primary);
+  line-height: 1.2;
+}
+
+.metric-card .metric-label {
+  font-size: 0.85rem;
+  color: #6c757d;
+  margin-top: 0.25rem;
+}
+
+.applicant-table th {
+  white-space: nowrap;
+  font-size: 0.85rem;
+}
+
+.applicant-table td {
+  vertical-align: middle;
+  font-size: 0.9rem;
+}
+
+.filter-bar {
+  background: #fff;
+  border-radius: var(--card-radius);
+  padding: 1rem;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.06);
+}
+
+#pdfProgressModal .modal-body {
+  min-height: 180px;
+}
+
+.document-check-list {
+  max-height: 280px;
+  overflow-y: auto;
+  font-size: 0.875rem;
+}
+
+.document-check-list .item-missing {
+  color: var(--brand-danger);
+  font-weight: 600;
+}
+
+.document-check-list .item-ok {
+  color: var(--brand-success);
+}
+
+.admin-nav-user {
+  font-size: 0.9rem;
+}

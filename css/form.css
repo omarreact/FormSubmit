@@ -1,0 +1,60 @@
+/* Applicant form specific styles */
+
+.form-section-accordion .accordion-button:not(.collapsed) {
+  background-color: #e8f1f8;
+  color: var(--brand-primary);
+  box-shadow: none;
+}
+
+.form-section-accordion .accordion-button:focus {
+  box-shadow: 0 0 0 0.2rem rgba(26, 101, 158, 0.25);
+}
+
+.upload-field {
+  border: 1px dashed #ced4da;
+  border-radius: 0.5rem;
+  padding: 0.75rem;
+  background: #fafbfc;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.upload-field:hover,
+.upload-field:focus-within {
+  border-color: var(--brand-accent);
+  background: #f0f6fb;
+}
+
+.upload-field .form-control[type="file"] {
+  font-size: 0.875rem;
+}
+
+.field-label-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem;
+  margin-bottom: 0.35rem;
+}
+
+.conditional-section {
+  display: none;
+}
+
+.conditional-section.visible {
+  display: block;
+}
+
+.alert-missing-docs ul {
+  margin-bottom: 0;
+}
+
+.success-application-id {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 1.25rem;
+  letter-spacing: 0.04em;
+  color: var(--brand-primary);
+}
+
+.validation-summary {
+  border-left: 4px solid var(--brand-danger);
+}
