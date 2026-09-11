@@ -6,10 +6,12 @@
  * Run initializeOnce() once, then Deploy as Web App (Execute as Me, Anyone).
  */
 
-var SPREADSHEET_ID = "YOUR_SPREADSHEET_ID";
-var ROOT_FOLDER_ID = "YOUR_DRIVE_FOLDER_ID";
-var ADMIN_TOKEN = "CHANGE_ME_TO_A_LONG_RANDOM_SECRET";
+
+var SPREADSHEET_ID = "1bW103Eg1YJ0J00Sueve6SZDoJAgOdK8gS9-6ynYw1Zo";
+var ROOT_FOLDER_ID = "15uHd0GP1Al6EFEBjfL1DZ2hy2TA1CWoc";
+var ADMIN_TOKEN = "VisaAdmin2026_xK9mQ2pL";  
 var APP_ID_PREFIX = "VISA-2026-";
+
 
 var SHEET_SUBMISSIONS = "Submissions";
 var SHEET_DOCUMENTS = "Documents";
