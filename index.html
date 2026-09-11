@@ -24,7 +24,6 @@
   </header>
 
   <main class="container py-4">
-    <!-- Success panel (hidden until submit) -->
     <div id="successPanel" class="d-none">
       <div class="card border-success">
         <div class="card-body text-center py-5">
@@ -46,11 +45,37 @@
         The system will identify any required documents that are missing.
       </div>
 
+      <div class="row g-3 mb-3">
+        <div class="col-md-6">
+          <div class="card h-100 border-warning">
+            <div class="card-body py-3">
+              <h2 class="h6 text-warning mb-2"><i class="bi bi-exclamation-triangle-fill me-1"></i> Important notes</h2>
+              <ul class="small mb-0 ps-3">
+                <li>Master’s applicants may <strong>include or exclude</strong> Master’s degree documents.</li>
+                <li>All required documents should be <strong>properly signed and apostilled</strong> where needed.</li>
+                <li class="text-success">Self-sponsored applicants may skip sponsor bank statement, solvency, and other sponsor documents.</li>
+              </ul>
+            </div>
+          </div>
+        </div>
+        <div class="col-md-6">
+          <div class="card h-100">
+            <div class="card-body py-3">
+              <h2 class="h6 mb-2"><i class="bi bi-cash-stack me-1"></i> Fees (informational)</h2>
+              <ul class="small mb-0 ps-3">
+                <li>Visa + VFS fees: <strong>14,000 BDT</strong> (regular service)</li>
+                <li class="text-warning">Premium service: extra charges may apply</li>
+              </ul>
+              <p class="small text-muted mb-0 mt-2">Pay attention to updates from VFS or the Italy Embassy in Dhaka.</p>
+            </div>
+          </div>
+        </div>
+      </div>
+
       <div id="validationSummary" class="alert alert-danger validation-summary d-none" role="alert"></div>
       <div id="submitStatus" class="alert d-none" role="status"></div>
 
       <form id="visaApplicationForm" novalidate>
-        <!-- Applicant information -->
         <div class="card mb-4">
           <div class="card-header">Applicant Information</div>
           <div class="card-body">
@@ -125,7 +150,6 @@
           </div>
         </div>
 
-        <!-- Document upload sections (built by JS) -->
         <div class="card mb-4">
           <div class="card-header">Documents</div>
           <div class="card-body">
@@ -146,7 +170,6 @@
     </div>
   </main>
 
-  <!-- Missing documents confirmation modal -->
   <div class="modal fade" id="missingDocsModal" tabindex="-1" aria-labelledby="missingDocsModalLabel" aria-hidden="true">
     <div class="modal-dialog">
       <div class="modal-content">
