@@ -24,13 +24,13 @@ export const APP_CONFIG = {
  */
 export const GOOGLE_CONFIG = {
   // Example: https://script.google.com/macros/s/AKfycbx.../exec
-  webAppUrl: "YOUR_APPS_SCRIPT_WEB_APP_URL",
+  webAppUrl: "https://script.google.com/macros/s/AKfycbybJDhmLXXywhMurEjgeoZCeX8scB-JxMrtkwEKqmbSVjVmhJlOVV9umhbkH4QjDqgXtQ/exec",
 
   /**
    * Shared secret for admin list/download endpoints.
    * Must match ADMIN_TOKEN in apps-script/Code.gs
    */
-  adminToken: "CHANGE_ME_TO_A_LONG_RANDOM_SECRET",
+  adminToken: "AKfycbybJDhmLXXywhMurEjgeoZCeX8scB-JxMrtkwEKqmbSVjVmhJlOVV9umhbkH4QjDqgXtQ",
 };
 
 export const ADMIN_SESSION_KEY = "visa_admin_authenticated";
